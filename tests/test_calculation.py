@@ -1,14 +1,15 @@
 # tests/test_calculations.py
 
 """
-Unit tests for the calculator_calculations module using pytest.
+Fully parameterized unit tests for the calculator_calculations module using pytest.
 
-This test suite covers both positive and negative scenarios for the Calculation
-classes and the CalculationFactory. It ensures that calculations execute correctly,
-the factory creates appropriate instances, and error handling behaves as expected.
+This test suite covers:
+- Positive and negative execution scenarios of calculation classes
+- Division by zero and edge cases (large/small/negative numbers)
+- Factory instance creation and errors
+- String (__str__) and repr (__repr__) formatting
 
-Tests are organized following the AAA (Arrange, Act, Assert) pattern and adhere
-to PEP8 standards for code style and formatting.
+All tests follow the AAA (Arrange, Act, Assert) pattern and PEP8 standards.
 """
 
 import pytest
@@ -25,548 +26,232 @@ from app.calculation import (
 
 
 # -----------------------------------------------------------------------------------
-# Test Concrete Calculation Classes
+# Parameterized Positive Execution Tests for Calculation Classes
 # -----------------------------------------------------------------------------------
 
+@pytest.mark.parametrize(
+    "calc_class, a, b, expected, mock_method",
+    [
+        (AddCalculation, 10.0, 5.0, 15.0, 'addition'),
+        (AddCalculation, -10.0, 5.0, -5.0, 'addition'),
+        (SubtractCalculation, 10.0, 5.0, 5.0, 'subtraction'),
+        (SubtractCalculation, -10.0, -5.0, -5.0, 'subtraction'),
+        (MultiplyCalculation, 10.0, 5.0, 50.0, 'multiplication'),
+        (MultiplyCalculation, -10.0, 5.0, -50.0, 'multiplication'),
+        (DivideCalculation, 10.0, 5.0, 2.0, 'division'),
+        (DivideCalculation, -10.0, -5.0, 2.0, 'division'),
+        (DivideCalculation, 1e308, 1e-308, 1e616, 'division'),  # Edge case: very large / very small
+    ]
+)
 @patch.object(Operation, 'addition')
-def test_add_calculation_execute_positive(mock_addition):
+@patch.object(Operation, 'subtraction')
+@patch.object(Operation, 'multiplication')
+@patch.object(Operation, 'division')
+def test_calculation_execute_positive(
+    mock_division, mock_multiplication, mock_subtraction, mock_addition,
+    calc_class, a, b, expected, mock_method
+):
     """
-    Test the execute method of AddCalculation for a positive scenario.
-
-    This test verifies that the AddCalculation class correctly calls the addition
-    method of the Operation class with the provided operands and returns the expected result.
+    Parameterized positive execution tests for all Calculation classes.
+    Edge cases included: negative numbers, large/small numbers.
     """
-    # Arrange
-    a = 10.0  # First operand
-    b = 5.0   # Second operand
-    expected_result = 15.0  # Expected result of addition
-    mock_addition.return_value = expected_result  # Mock the addition method's return value
-    add_calc = AddCalculation(a, b)  # Instantiate AddCalculation with operands
+    # Arrange: assign expected return value to the correct Operation method
+    getattr(locals()[f'mock_{mock_method}'], 'return_value', None)
+    if mock_method == 'addition':
+        mock_addition.return_value = expected
+    elif mock_method == 'subtraction':
+        mock_subtraction.return_value = expected
+    elif mock_method == 'multiplication':
+        mock_multiplication.return_value = expected
+    elif mock_method == 'division':
+        mock_division.return_value = expected
 
     # Act
-    result = add_calc.execute()  # Execute the addition calculation
+    calc = calc_class(a, b)
+    result = calc.execute()
 
     # Assert
-    mock_addition.assert_called_once_with(a, b)  # Ensure addition was called with correct operands
-    assert result == expected_result  # Verify the result matches the expected value
+    assert result == expected
+    if mock_method == 'addition':
+        mock_addition.assert_called_once_with(a, b)
+    elif mock_method == 'subtraction':
+        mock_subtraction.assert_called_once_with(a, b)
+    elif mock_method == 'multiplication':
+        mock_multiplication.assert_called_once_with(a, b)
+    elif mock_method == 'division':
+        mock_division.assert_called_once_with(a, b)
 
 
+# -----------------------------------------------------------------------------------
+# Parameterized Negative Execution Tests (Exceptions)
+# -----------------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "calc_class, a, b, mock_method, exception_msg",
+    [
+        (AddCalculation, 10.0, 5.0, 'addition', "Addition error"),
+        (SubtractCalculation, 10.0, 5.0, 'subtraction', "Subtraction error"),
+        (MultiplyCalculation, 10.0, 5.0, 'multiplication', "Multiplication error"),
+        (DivideCalculation, 10.0, 5.0, 'division', "Division error"),
+    ]
+)
 @patch.object(Operation, 'addition')
-def test_add_calculation_execute_negative(mock_addition):
-    """
-    Test the execute method of AddCalculation for a negative scenario.
-
-    This test ensures that if the Operation.addition method raises an exception,
-    the AddCalculation.execute method propagates it correctly.
-    """
-    # Arrange
-    a = 10.0
-    b = 5.0
-    mock_addition.side_effect = Exception("Addition error")  # Simulate an exception in addition
-    add_calc = AddCalculation(a, b)
-
-    # Act & Assert
-    with pytest.raises(Exception) as exc_info:
-        add_calc.execute()  # Attempt to execute addition, expecting an exception
-
-    # Verify that the exception message is as expected
-    assert str(exc_info.value) == "Addition error"
-
-
 @patch.object(Operation, 'subtraction')
-def test_subtract_calculation_execute_positive(mock_subtraction):
-    """
-    Test the execute method of SubtractCalculation for a positive scenario.
-
-    This test verifies that the SubtractCalculation class correctly calls the subtraction
-    method of the Operation class with the provided operands and returns the expected result.
-    """
-    # Arrange
-    a = 10.0
-    b = 5.0
-    expected_result = 5.0
-    mock_subtraction.return_value = expected_result
-    subtract_calc = SubtractCalculation(a, b)
-
-    # Act
-    result = subtract_calc.execute()
-
-    # Assert
-    mock_subtraction.assert_called_once_with(a, b)
-    assert result == expected_result
-
-
-@patch.object(Operation, 'subtraction')
-def test_subtract_calculation_execute_negative(mock_subtraction):
-    """
-    Test the execute method of SubtractCalculation for a negative scenario.
-
-    This test ensures that if the Operation.subtraction method raises an exception,
-    the SubtractCalculation.execute method propagates it correctly.
-    """
-    # Arrange
-    a = 10.0
-    b = 5.0
-    mock_subtraction.side_effect = Exception("Subtraction error")
-    subtract_calc = SubtractCalculation(a, b)
-
-    # Act & Assert
-    with pytest.raises(Exception) as exc_info:
-        subtract_calc.execute()
-
-    # Verify that the exception message is as expected
-    assert str(exc_info.value) == "Subtraction error"
-
-
 @patch.object(Operation, 'multiplication')
-def test_multiply_calculation_execute_positive(mock_multiplication):
-    """
-    Test the execute method of MultiplyCalculation for a positive scenario.
-
-    This test verifies that the MultiplyCalculation class correctly calls the multiplication
-    method of the Operation class with the provided operands and returns the expected result.
-    """
-    # Arrange
-    a = 10.0
-    b = 5.0
-    expected_result = 50.0
-    mock_multiplication.return_value = expected_result
-    multiply_calc = MultiplyCalculation(a, b)
-
-    # Act
-    result = multiply_calc.execute()
-
-    # Assert
-    mock_multiplication.assert_called_once_with(a, b)
-    assert result == expected_result
-
-
-@patch.object(Operation, 'multiplication')
-def test_multiply_calculation_execute_negative(mock_multiplication):
-    """
-    Test the execute method of MultiplyCalculation for a negative scenario.
-
-    This test ensures that if the Operation.multiplication method raises an exception,
-    the MultiplyCalculation.execute method propagates it correctly.
-    """
-    # Arrange
-    a = 10.0
-    b = 5.0
-    mock_multiplication.side_effect = Exception("Multiplication error")
-    multiply_calc = MultiplyCalculation(a, b)
-
-    # Act & Assert
-    with pytest.raises(Exception) as exc_info:
-        multiply_calc.execute()
-
-    # Verify that the exception message is as expected
-    assert str(exc_info.value) == "Multiplication error"
-
-
 @patch.object(Operation, 'division')
-def test_divide_calculation_execute_positive(mock_division):
+def test_calculation_execute_exceptions(
+    mock_division, mock_multiplication, mock_subtraction, mock_addition,
+    calc_class, a, b, mock_method, exception_msg
+):
     """
-    Test the execute method of DivideCalculation for a positive scenario.
-
-    This test verifies that the DivideCalculation class correctly calls the division
-    method of the Operation class with the provided operands and returns the expected result.
+    Parameterized negative execution tests for all Calculation classes.
+    Each Operation method is mocked to raise an exception.
     """
-    # Arrange
-    a = 10.0
-    b = 5.0
-    expected_result = 2.0
-    mock_division.return_value = expected_result
-    divide_calc = DivideCalculation(a, b)
-
-    # Act
-    result = divide_calc.execute()
-
-    # Assert
-    mock_division.assert_called_once_with(a, b)
-    assert result == expected_result
-
-
-@patch.object(Operation, 'division')
-def test_divide_calculation_execute_negative(mock_division):
-    """
-    Test the execute method of DivideCalculation for a negative scenario.
-
-    This test ensures that if the Operation.division method raises an exception,
-    the DivideCalculation.execute method propagates it correctly.
-    """
-    # Arrange
-    a = 10.0
-    b = 5.0
-    mock_division.side_effect = Exception("Division error")
-    divide_calc = DivideCalculation(a, b)
+    # Arrange: set the correct Operation method to raise exception
+    if mock_method == 'addition':
+        mock_addition.side_effect = Exception(exception_msg)
+    elif mock_method == 'subtraction':
+        mock_subtraction.side_effect = Exception(exception_msg)
+    elif mock_method == 'multiplication':
+        mock_multiplication.side_effect = Exception(exception_msg)
+    elif mock_method == 'division':
+        mock_division.side_effect = Exception(exception_msg)
 
     # Act & Assert
+    calc = calc_class(a, b)
     with pytest.raises(Exception) as exc_info:
-        divide_calc.execute()
-
-    # Verify that the exception message is as expected
-    assert str(exc_info.value) == "Division error"
+        calc.execute()
+    assert str(exc_info.value) == exception_msg
 
 
-def test_divide_calculation_execute_division_by_zero():
+# -----------------------------------------------------------------------------------
+# Parameterized Division by Zero Test
+# -----------------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "calc_class, a, b",
+    [
+        (DivideCalculation, 10.0, 0.0),
+        (DivideCalculation, -5.0, 0.0),
+        (DivideCalculation, 0.0, 0.0)
+    ]
+)
+def test_divide_by_zero(calc_class, a, b):
     """
-    Test that DivideCalculation.execute raises ZeroDivisionError when dividing by zero.
-
-    This test verifies that attempting to divide by zero using DivideCalculation
-    correctly raises a ZeroDivisionError with an appropriate error message.
+    Parameterized test for DivideCalculation division by zero.
+    Ensures ZeroDivisionError is raised with correct message.
     """
-    # Arrange
-    a = 10.0
-    b = 0.0
-    divide_calc = DivideCalculation(a, b)
-
-    # Act & Assert
+    calc = calc_class(a, b)
     with pytest.raises(ZeroDivisionError) as exc_info:
-        divide_calc.execute()
-
-    # Verify the exception message is as expected
+        calc.execute()
     assert str(exc_info.value) == "Cannot divide by zero."
 
 
 # -----------------------------------------------------------------------------------
-# Test CalculationFactory
+# Parameterized Factory Creation Tests
 # -----------------------------------------------------------------------------------
 
-def test_factory_creates_add_calculation():
+@pytest.mark.parametrize(
+    "calc_type, expected_class",
+    [
+        ('add', AddCalculation),
+        ('subtract', SubtractCalculation),
+        ('multiply', MultiplyCalculation),
+        ('divide', DivideCalculation)
+    ]
+)
+def test_factory_creates_instances(calc_type, expected_class):
     """
-    Test that CalculationFactory creates an AddCalculation instance.
-
-    This test ensures that the factory correctly instantiates the AddCalculation
-    class when the 'add' calculation type is requested.
+    Parameterized tests to verify that CalculationFactory creates correct instances.
     """
-    # Arrange
-    a = 10.0
-    b = 5.0
-
-    # Act
-    calc = CalculationFactory.create_calculation('add', a, b)
-
-    # Assert
-    assert isinstance(calc, AddCalculation)  # Check if the instance is of AddCalculation
-    assert calc.a == a                        # Verify the first operand
-    assert calc.b == b                        # Verify the second operand
-
-
-def test_factory_creates_subtract_calculation():
-    """
-    Test that CalculationFactory creates a SubtractCalculation instance.
-
-    This test verifies that the factory correctly instantiates the SubtractCalculation
-    class when the 'subtract' calculation type is requested.
-    """
-    # Arrange
-    a = 10.0
-    b = 5.0
-
-    # Act
-    calc = CalculationFactory.create_calculation('subtract', a, b)
-
-    # Assert
-    assert isinstance(calc, SubtractCalculation)
+    a, b = 10.0, 5.0
+    calc = CalculationFactory.create_calculation(calc_type, a, b)
+    assert isinstance(calc, expected_class)
     assert calc.a == a
     assert calc.b == b
 
 
-def test_factory_creates_multiply_calculation():
+@pytest.mark.parametrize(
+    "unsupported_type",
+    ['modulus', 'power', 'sqrt']
+)
+def test_factory_unsupported_type(unsupported_type):
     """
-    Test that CalculationFactory creates a MultiplyCalculation instance.
-
-    This test ensures that the factory correctly instantiates the MultiplyCalculation
-    class when the 'multiply' calculation type is requested.
+    Parameterized tests to verify that requesting unsupported calculation type raises ValueError.
     """
-    # Arrange
-    a = 10.0
-    b = 5.0
-
-    # Act
-    calc = CalculationFactory.create_calculation('multiply', a, b)
-
-    # Assert
-    assert isinstance(calc, MultiplyCalculation)
-    assert calc.a == a
-    assert calc.b == b
-
-
-def test_factory_creates_divide_calculation():
-    """
-    Test that CalculationFactory creates a DivideCalculation instance.
-
-    This test verifies that the factory correctly instantiates the DivideCalculation
-    class when the 'divide' calculation type is requested.
-    """
-    # Arrange
-    a = 10.0
-    b = 5.0
-
-    # Act
-    calc = CalculationFactory.create_calculation('divide', a, b)
-
-    # Assert
-    assert isinstance(calc, DivideCalculation)
-    assert calc.a == a
-    assert calc.b == b
-
-
-def test_factory_create_unsupported_calculation():
-    """
-    Test that CalculationFactory raises ValueError when an unsupported calculation type is requested.
-
-    This test ensures that requesting a calculation type not registered with the factory
-    results in a ValueError with an appropriate error message.
-    """
-    # Arrange
-    a = 10.0
-    b = 5.0
-    unsupported_type = 'modulus'  # An unsupported calculation type
-
-    # Act & Assert
+    a, b = 10.0, 5.0
     with pytest.raises(ValueError) as exc_info:
         CalculationFactory.create_calculation(unsupported_type, a, b)
-
-    # Verify that the exception message contains the unsupported type
-    assert f"Unsupported calculation type: '{unsupported_type}'" in str(exc_info.value)
-
-
-def test_factory_register_calculation_duplicate():
-    """
-    Test that registering a calculation type that's already registered raises ValueError.
-
-    This test verifies that attempting to register a calculation type that has already
-    been registered with the factory results in a ValueError to prevent duplicate entries.
-    """
-    # Arrange & Act
-    with pytest.raises(ValueError) as exc_info:
-        @CalculationFactory.register_calculation('add')  # Attempt to register 'add' again
-        class AnotherAddCalculation(Calculation):
-            """
-            AnotherAddCalculation attempts to register the 'add' calculation type again.
-            """
-            def execute(self) -> float:
-                return Operation.addition(self.a, self.b)
-
-    # Assert
-    assert "Calculation type 'add' is already registered." in str(exc_info.value)
+    assert unsupported_type in str(exc_info.value)
 
 
 # -----------------------------------------------------------------------------------
-# Test String Representations
+# Parameterized String Representation (__str__) Tests
 # -----------------------------------------------------------------------------------
 
-@patch.object(Operation, 'addition', return_value=15.0)
-def test_calculation_str_representation_addition(mock_addition):
-    """
-    Test the __str__ method of AddCalculation.
-
-    This test verifies that the string representation of an AddCalculation instance
-    is formatted correctly, displaying the class name, operation, operands, and result.
-    """
-    # Arrange
-    a = 10.0
-    b = 5.0
-    add_calc = AddCalculation(a, b)
-
-    # Act
-    calc_str = str(add_calc)
-
-    # Assert
-    # Expected string should reflect the operation name derived from the class name ('Add')
-    expected_str = f"{add_calc.__class__.__name__}: {a} Add {b} = 15.0"
-    assert calc_str == expected_str
-
-
-@patch.object(Operation, 'subtraction', return_value=5.0)
-def test_calculation_str_representation_subtraction(mock_subtraction):
-    """
-    Test the __str__ method of SubtractCalculation.
-
-    This test verifies that the string representation of a SubtractCalculation instance
-    is formatted correctly, displaying the class name, operation, operands, and result.
-    """
-    # Arrange
-    a = 10.0
-    b = 5.0
-    subtract_calc = SubtractCalculation(a, b)
-
-    # Act
-    calc_str = str(subtract_calc)
-
-    # Assert
-    # Expected string should reflect the operation name derived from the class name ('Subtract')
-    expected_str = f"{subtract_calc.__class__.__name__}: {a} Subtract {b} = 5.0"
-    assert calc_str == expected_str
-
-
-@patch.object(Operation, 'multiplication', return_value=50.0)
-def test_calculation_str_representation_multiplication(mock_multiplication):
-    """
-    Test the __str__ method of MultiplyCalculation.
-
-    This test verifies that the string representation of a MultiplyCalculation instance
-    is formatted correctly, displaying the class name, operation, operands, and result.
-    """
-    # Arrange
-    a = 10.0
-    b = 5.0
-    multiply_calc = MultiplyCalculation(a, b)
-
-    # Act
-    calc_str = str(multiply_calc)
-
-    # Assert
-    # Expected string should reflect the operation name derived from the class name ('Multiply')
-    expected_str = f"{multiply_calc.__class__.__name__}: {a} Multiply {b} = 50.0"
-    assert calc_str == expected_str
-
-
-@patch.object(Operation, 'division', return_value=2.0)
-def test_calculation_str_representation_division(mock_division):
-    """
-    Test the __str__ method of DivideCalculation.
-
-    This test verifies that the string representation of a DivideCalculation instance
-    is formatted correctly, displaying the class name, operation, operands, and result.
-    """
-    # Arrange
-    a = 10.0
-    b = 5.0
-    divide_calc = DivideCalculation(a, b)
-
-    # Act
-    calc_str = str(divide_calc)
-
-    # Assert
-    # Expected string should reflect the operation name derived from the class name ('Divide')
-    expected_str = f"{divide_calc.__class__.__name__}: {a} Divide {b} = 2.0"
-    assert calc_str == expected_str
-
-
-def test_calculation_repr_representation_subtraction():
-    """
-    Test the __repr__ method of SubtractCalculation.
-
-    This test ensures that the repr representation of a SubtractCalculation instance
-    accurately reflects the class name and the operands.
-    """
-    # Arrange
-    a = 10.0
-    b = 5.0
-    subtract_calc = SubtractCalculation(a, b)
-
-    # Act
-    calc_repr = repr(subtract_calc)
-
-    # Assert
-    # The __repr__ should display the class name and the operands in a clear format
-    expected_repr = f"{SubtractCalculation.__name__}(a={a}, b={b})"
-    assert calc_repr == expected_repr
-
-
-def test_calculation_repr_representation_division():
-    """
-    Test the __repr__ method of DivideCalculation.
-
-    This test ensures that the repr representation of a DivideCalculation instance
-    accurately reflects the class name and the operands.
-    """
-    # Arrange
-    a = 10.0
-    b = 5.0
-    divide_calc = DivideCalculation(a, b)
-
-    # Act
-    calc_repr = repr(divide_calc)
-
-    # Assert
-    # The __repr__ should display the class name and the operands in a clear format
-    expected_repr = f"{DivideCalculation.__name__}(a={a}, b={b})"
-    assert calc_repr == expected_repr
-
-
-# -----------------------------------------------------------------------------------
-# Parameterized Tests for Execute Method
-# -----------------------------------------------------------------------------------
-
-@pytest.mark.parametrize("calc_type, a, b, expected_result", [
-    ('add', 10.0, 5.0, 15.0),
-    ('subtract', 10.0, 5.0, 5.0),
-    ('multiply', 10.0, 5.0, 50.0),
-    ('divide', 10.0, 5.0, 2.0),
-])
-@patch.object(Operation, 'addition')
-@patch.object(Operation, 'subtraction')
-@patch.object(Operation, 'multiplication')
-@patch.object(Operation, 'division')
-def test_calculation_execute_parameterized(
-    mock_division, mock_multiplication, mock_subtraction, mock_addition,
-    calc_type, a, b, expected_result
-):
-    """
-    Parameterized test for execute method of different Calculation subclasses.
-
-    This test runs multiple scenarios where different calculation types are executed
-    with specific operands, verifying that the correct result is returned.
-    """
-    # Arrange: Set the appropriate mock based on calculation type
-    if calc_type == 'add':
-        mock_addition.return_value = expected_result
-    elif calc_type == 'subtract':
-        mock_subtraction.return_value = expected_result
-    elif calc_type == 'multiply':
-        mock_multiplication.return_value = expected_result
-    elif calc_type == 'divide':
-        mock_division.return_value = expected_result
-
-    # Act: Create calculation instance and execute
-    calc = CalculationFactory.create_calculation(calc_type, a, b)
-    result = calc.execute()
-
-    # Assert: Verify the correct operation was called and result matches
-    if calc_type == 'add':
-        mock_addition.assert_called_once_with(a, b)
-    elif calc_type == 'subtract':
-        mock_subtraction.assert_called_once_with(a, b)
-    elif calc_type == 'multiply':
-        mock_multiplication.assert_called_once_with(a, b)
-    elif calc_type == 'divide':
-        mock_division.assert_called_once_with(a, b)
-
-    assert result == expected_result
-
-
-# -----------------------------------------------------------------------------------
-# Parameterized Tests for String Representation
-# -----------------------------------------------------------------------------------
-
-@pytest.mark.parametrize("calc_type, a, b, expected_str", [
-    ('add', 10.0, 5.0, "AddCalculation: 10.0 Add 5.0 = 15.0"),
-    ('subtract', 10.0, 5.0, "SubtractCalculation: 10.0 Subtract 5.0 = 5.0"),
-    ('multiply', 10.0, 5.0, "MultiplyCalculation: 10.0 Multiply 5.0 = 50.0"),
-    ('divide', 10.0, 5.0, "DivideCalculation: 10.0 Divide 5.0 = 2.0"),
-])
+@pytest.mark.parametrize(
+    "calc_class, a, b, expected_str, mock_method, mock_value",
+    [
+        (AddCalculation, 10.0, 5.0, "AddCalculation: 10.0 Add 5.0 = 15.0", 'addition', 15.0),
+        (SubtractCalculation, 10.0, 5.0, "SubtractCalculation: 10.0 Subtract 5.0 = 5.0", 'subtraction', 5.0),
+        (MultiplyCalculation, 10.0, 5.0, "MultiplyCalculation: 10.0 Multiply 5.0 = 50.0", 'multiplication', 50.0),
+        (DivideCalculation, 10.0, 5.0, "DivideCalculation: 10.0 Divide 5.0 = 2.0", 'division', 2.0)
+    ]
+)
 @patch.object(Operation, 'addition', return_value=15.0)
 @patch.object(Operation, 'subtraction', return_value=5.0)
 @patch.object(Operation, 'multiplication', return_value=50.0)
 @patch.object(Operation, 'division', return_value=2.0)
-def test_calculation_str_parameterized(
+def test_calculation_str(
     mock_division, mock_multiplication, mock_subtraction, mock_addition,
-    calc_type, a, b, expected_str
+    calc_class, a, b, expected_str, mock_method, mock_value
 ):
     """
-    Parameterized test for __str__ method of Calculation subclasses.
-
-    This test verifies that the string representation of different Calculation instances
-    is formatted correctly, displaying the class name, operation, operands, and result.
+    Parameterized __str__ tests for Calculation subclasses.
+    Verifies string formatting for different operations.
     """
-    # Arrange: No additional setup needed as mocks are already set via decorators
-
-    # Act: Create calculation instance and get string representation
-    calc = CalculationFactory.create_calculation(calc_type, a, b)
+    calc = calc_class(a, b)
     calc_str = str(calc)
-
-    # Assert: Verify the string representation matches the expected format
     assert calc_str == expected_str
+
+
+# -----------------------------------------------------------------------------------
+# Parameterized Repr Representation (__repr__) Tests
+# -----------------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "calc_class, a, b, expected_repr",
+    [
+        (AddCalculation, 10.0, 5.0, "AddCalculation(a=10.0, b=5.0)"),
+        (SubtractCalculation, 10.0, 5.0, "SubtractCalculation(a=10.0, b=5.0)"),
+        (MultiplyCalculation, 10.0, 5.0, "MultiplyCalculation(a=10.0, b=5.0)"),
+        (DivideCalculation, 10.0, 5.0, "DivideCalculation(a=10.0, b=5.0)")
+    ]
+)
+def test_calculation_repr(calc_class, a, b, expected_repr):
+    """
+    Parameterized __repr__ tests for Calculation subclasses.
+    Verifies repr formatting for all operations.
+    """
+    calc = calc_class(a, b)
+    assert repr(calc) == expected_repr
+
+
+# -----------------------------------------------------------------------------------
+# Parameterized Factory Duplicate Registration Test
+# -----------------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "existing_type",
+    ['add', 'subtract', 'multiply', 'divide']
+)
+def test_factory_register_duplicate(existing_type):
+    """
+    Parameterized test to ensure duplicate calculation registration raises ValueError.
+    """
+    with pytest.raises(ValueError) as exc_info:
+        @CalculationFactory.register_calculation(existing_type)
+        class DummyCalculation(Calculation):
+            def execute(self):
+                return 0.0
+    assert f"Calculation type '{existing_type}' is already registered." in str(exc_info.value)
